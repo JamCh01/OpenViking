@@ -149,6 +149,7 @@ jobs:
       langchain_changed: ${{ steps.check.outputs.langchain_changed }}
       openclaw_changed: ${{ steps.check.outputs.openclaw_changed }}
       sdk_python_changed: ${{ steps.check.outputs.sdk_python_changed }}
+      sdk_rust_changed: ${{ steps.check.outputs.sdk_rust_changed }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -220,6 +221,41 @@ jobs:
           cd /tmp
           /tmp/openviking-sdk-wheel/bin/python -c "import openviking_sdk"
 
+  sdk-rust-tests:
+    needs: check-deps
+    if: ${{ needs.check-deps.outputs.sdk_rust_changed == 'true' }}
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: sdk/rust
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Install ast-grep
+        run: npm install -g @ast-grep/cli
+
+      - name: Check formatting, lints, style rules, docs, and tests
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets -- -D warnings
+          ast-grep scan -c sgconfig.yml
+          RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
+          cargo test --locked
+          cargo package --locked --allow-dirty --list
+
+      - name: Install MSRV toolchain (1.89)
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: "1.89"
+
+      - name: Check MSRV compatibility
+        run: cargo +1.89 check --locked --all-targets
+
   langchain-tests:
     needs: check-deps
     if: ${{ needs.check-deps.outputs.langchain_changed == 'true' }}
@@ -240,6 +276,12 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
+
+      - name: Fallback Python SDK version on tagless forks
+        run: |
+          if ! git describe --tags --match 'python-sdk@*' >/dev/null 2>&1; then
+            echo "SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENVIKING_SDK=0.1.99" >> "$GITHUB_ENV"
+          fi
 
       - name: Install standalone integration
         run: |

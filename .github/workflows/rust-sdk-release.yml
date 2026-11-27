@@ -1,0 +1,89 @@
+name: Rust SDK Release
+
+on:
+  push:
+    tags:
+      - "rust-sdk@*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: sdk/rust
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Install ast-grep
+        run: npm install -g @ast-grep/cli
+
+      - name: Validate crate
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets -- -D warnings
+          ast-grep scan -c sgconfig.yml
+          RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
+          cargo test --locked
+          cargo package --locked
+
+      - name: Validate release tag
+        if: github.event_name == 'push'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          CRATE_VERSION="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          test "$RELEASE_TAG" = "rust-sdk@$CRATE_VERSION"
+
+      - name: Check whether version already exists on crates.io
+        id: published
+        run: |
+          CRATE_VERSION="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          if python3 - "$CRATE_VERSION" <<'PY'
+          import json
+          import sys
+          import urllib.error
+          import urllib.request
+
+          target_version = sys.argv[1]
+          req = urllib.request.Request(
+              "https://index.crates.io/op/en/openviking-sdk",
+              headers={"User-Agent": "openviking-sdk-release-ci"},
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=15) as resp:
+                  lines = resp.read().decode("utf-8").splitlines()
+          except urllib.error.HTTPError as exc:
+              if exc.code == 404:
+                  sys.exit(1)
+              raise
+
+          for line in lines:
+              line = line.strip()
+              if not line:
+                  continue
+              if json.loads(line).get("vers") == target_version:
+                  sys.exit(0)
+          sys.exit(1)
+          PY
+          then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "openviking-sdk@$CRATE_VERSION already exists on crates.io; skipping."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish crate to crates.io
+        if: steps.published.outputs.exists == 'false'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked

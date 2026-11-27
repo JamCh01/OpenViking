@@ -66,6 +66,7 @@ def plan(paths, full=False):
             r"^\.github/workflows/pr\.yml$"
         ),
         "sdk_python_changed": changed(r"^sdk/python/|^\.github/workflows/pr\.yml$"),
+        "sdk_rust_changed": changed(r"^sdk/rust/|^\.github/workflows/(pr|rust-sdk-release)\.yml$"),
     }
 
 

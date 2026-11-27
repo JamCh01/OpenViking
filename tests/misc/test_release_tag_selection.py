@@ -63,3 +63,23 @@ def test_release_build_pins_cli_and_wheel_to_git_version() -> None:
     assert workflow.count('git describe --tags --exact-match "$GITHUB_SHA"') == 2
     assert workflow.count("rm -f openviking/_version.py") == 2
     assert workflow.count("rm -rf openviking.egg-info") == 2
+
+
+def test_rust_sdk_release_uses_sdk_only_at_sign_tags_and_isolated_ci_plan() -> None:
+    import importlib.util
+
+    workflow = (ROOT / ".github/workflows/rust-sdk-release.yml").read_text()
+    assert '"rust-sdk@*"' in workflow
+    assert 'test "$RELEASE_TAG" = "rust-sdk@$CRATE_VERSION"' in workflow
+
+    spec = importlib.util.spec_from_file_location("ci_plan", ROOT / ".github/scripts/ci_plan.py")
+    assert spec is not None and spec.loader is not None
+    ci_plan = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ci_plan)
+
+    rust_only = ci_plan.plan(["sdk/rust/src/lib.rs"])
+    assert rust_only["sdk_rust_changed"] is True
+    assert rust_only["sdk_python_changed"] is False
+    assert rust_only["api_changed"] is False
+    assert rust_only["deps_changed"] is False
+
