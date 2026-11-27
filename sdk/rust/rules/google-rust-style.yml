@@ -1,0 +1,86 @@
+id: no-glob-imports-outside-tests
+language: rust
+severity: error
+message: "Google Rust Style Guide: Avoid wildcard/glob imports (`use ...::*;`) outside test modules."
+files:
+  - "src/**/*.rs"
+rule:
+  kind: use_wildcard
+  not:
+    inside:
+      kind: mod_item
+      has:
+        kind: identifier
+        regex: "^tests$"
+      stopBy: end
+---
+id: one-module-per-use
+language: rust
+severity: error
+message: "Google Rust Style Guide: Write one `use` statement per module rather than nesting sub-modules inside a `use` list."
+files:
+  - "src/**/*.rs"
+  - "tests/**/*.rs"
+rule:
+  kind: use_list
+  has:
+    any:
+      - kind: scoped_use_list
+      - kind: scoped_identifier
+    stopBy: end
+---
+id: no-unwrap-in-library
+language: rust
+severity: error
+message: "Library code must propagate errors via `Result` / `let-else` instead of calling `.unwrap()`."
+files:
+  - "src/**/*.rs"
+rule:
+  pattern: $EXPR.unwrap()
+  not:
+    inside:
+      kind: mod_item
+      has:
+        kind: identifier
+        regex: "^tests$"
+      stopBy: end
+---
+id: no-expect-in-library
+language: rust
+severity: error
+message: "Library code must propagate errors via `Result` / `let-else` instead of calling `.expect(...)`."
+files:
+  - "src/**/*.rs"
+rule:
+  pattern: $EXPR.expect($$$ARGS)
+  not:
+    inside:
+      kind: mod_item
+      has:
+        kind: identifier
+        regex: "^tests$"
+      stopBy: end
+---
+id: no-todo-or-unimplemented
+language: rust
+severity: error
+message: "Production SDK code must not leave `todo!()` or `unimplemented!()`."
+files:
+  - "src/**/*.rs"
+rule:
+  any:
+    - pattern: todo!($$$ARGS)
+    - pattern: unimplemented!($$$ARGS)
+---
+id: no-unsafe-blocks
+language: rust
+severity: error
+message: "Unsafe blocks and functions are forbidden in `openviking-sdk`."
+files:
+  - "src/**/*.rs"
+  - "tests/**/*.rs"
+rule:
+  any:
+    - kind: unsafe_block
+    - kind: function_modifiers
+      regex: "\\bunsafe\\b"
