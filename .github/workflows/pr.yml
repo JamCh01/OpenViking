@@ -277,6 +277,12 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Fallback Python SDK version on tagless forks
+        run: |
+          if ! git describe --tags --match 'python-sdk@*' >/dev/null 2>&1; then
+            echo "SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENVIKING_SDK=0.1.99" >> "$GITHUB_ENV"
+          fi
+
       - name: Install standalone integration
         run: |
           uv pip install --system -e sdk/python
